@@ -1,0 +1,24 @@
+// -*- C++ -*-
+#ifndef EVENVECTOR_H
+#define EVENVECTOR_H
+
+#include <vector>
+#include <exception>
+template<typename E>
+class EvenVector : public std::vector<E> {
+public:
+    void check(){
+        if(this->size() % 2)
+            throw std::logic_error("EvenVector's size must to be even.");
+    }
+
+    EvenVector(std::vector<E> data) : std::vector<E>(data) {
+        check();
+    }
+
+    EvenVector(std::initializer_list<E> data) : std::vector<E>(data) {
+        check();
+    }
+};
+
+#endif // EVENVECTOR_H

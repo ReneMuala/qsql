@@ -1,0 +1,70 @@
+// -*- C++ -*-
+//
+//  model.hpp
+//  QQL
+//
+//  Created by René Descartes Domingos Muala on 17/08/23.
+//
+
+#ifndef basic_model_hpp
+#define basic_model_hpp
+#include <string>
+#include <any>
+#include <optional>
+#include <map>
+#include <qsql/collections/evenvector>
+
+namespace qql {
+typedef std::variant<bool, short, int, float, time_t, double, char, std::string> Data;
+std::string cvt_data_string(const Data & data){
+    if(std::holds_alternative<bool>(data))
+        return std::get<bool>(data) ? "true" : "false";
+    else if(std::holds_alternative<short>(data) or std::holds_alternative<int>(data))
+        return std::to_string(std::get<int>(data));
+    else if(std::holds_alternative<time_t>(data))
+        return std::to_string(std::get<time_t>(data));
+    else if(std::holds_alternative<float>(data) or std::holds_alternative<double>(data))
+        return std::to_string(std::get<double>(data));
+    else if(std::holds_alternative<char>(data)){
+        std::string _;
+        return _=std::get<char>(data);
+    } else {
+        return std::get<std::string>(data);
+    }
+}
+template <typename T, typename K>
+class BasicModel {
+protected:
+    const std::string entity;
+public:
+
+    BasicModel(const std::string entity): entity(entity) {}
+    virtual T query(const std::string) = 0;
+    virtual T query(const std::string, const std::vector<Data> params) = 0;
+
+    virtual T findAll() = 0;
+    virtual T findAll(EvenVector<Data> data) = 0;
+    virtual T findWhere(const std::string) = 0;
+    virtual T findWhere(const std::string, const std::vector<Data> params) = 0;
+    virtual T find(const K id) = 0;
+
+    virtual T deleteAll() = 0;
+    virtual T deleteAll(EvenVector<Data> data) = 0;
+    virtual T deleteWhere(const std::string) = 0;
+    virtual T deleteWhere(const std::string, const std::vector<Data> params) = 0;
+    virtual T delete_(const K id) = 0;
+
+    virtual T updateAll(EvenVector<Data> data) = 0;
+    virtual T updateWhere(const std::string, EvenVector<Data> new_values) = 0;
+    virtual T updateWhere(const std::string, const std::vector<Data> params, EvenVector<Data> new_values) = 0;
+    virtual T update(const K id, EvenVector<Data> new_values) = 0;
+
+    virtual T insert(const EvenVector<Data> params) = 0;
+    virtual T insertAll(const std::vector<std::string> fields, std::vector<Data> values) = 0;
+
+    virtual T drop() = 0;
+    virtual T create(EvenVector<Data> data, std::string sufix = "") = 0;
+};
+}
+
+#endif /* model_hpp */

@@ -1,0 +1,10 @@
+// -*- C++ -*-
+#ifndef FAKE_STD_STRING_H
+#define FAKE_STD_STRING_H
+#include <string>
+namespace std {
+std::string to_string(std::string value){
+    return value;
+}
+}
+#endif // STRING_H

@@ -1,0 +1,14 @@
+// -*- C++ -*-
+#ifndef QQL_PQ_ERROR_H
+#define QQL_PQ_ERROR_H
+#include <exception>
+#include <string>
+namespace qql {
+namespace pq {
+class Error : public std::runtime_error {
+public: Error(std::string cause): std::runtime_error(cause){}
+};
+}
+}
+
+#endif // ERROR_H

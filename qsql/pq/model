@@ -1,0 +1,387 @@
+// -*- C++ -*-
+//
+//  model.hpp
+//  QQL
+//
+//  Created by René Descartes Domingos Muala on 17/08/23.
+//
+
+#ifndef model_hpp
+#define model_hpp
+#include <iostream>
+#include <qsql/pq/error>
+#include <pqxx/pqxx>
+#include <algorithm>
+#include <qsql/model/basic_model>
+#include <qsql/fakestd/string>
+#include <regex>
+namespace qql {
+namespace pq {
+using namespace std;
+        template<typename K>
+        class Model : public BasicModel<pqxx::result, K> {
+            pqxx::connection connection;
+            pqxx::work work;
+            bool did_commit;
+            protected: static pqxx::connection get_new_connection(std::string url){
+                return pqxx::connection {
+                    url
+                };
+            }
+            public:
+            bool auto_commit;
+            explicit Model(std::string entity, std::string url):
+                    BasicModel<pqxx::result, K>(entity),
+                    connection(get_new_connection(url)),
+                    work(connection),
+                    did_commit(true),
+                    auto_commit(false){
+            }
+
+            ~Model(){
+                if(not did_commit){
+                    if(not auto_commit){
+                        std::cerr << typeid(this).name() <<  __FUNCTION__ << ": Pending operations did not commit, set this->auto_commit=true or call this->commit()" << std::endl;
+                    } else {
+                        commit();
+                    }
+                }
+            }
+
+            pqxx::result query(const std::string command) override {
+                static const std::regex this_rgx("\\$this");
+                std::vector<std::string> params_str;
+                did_commit = false;
+                return work.exec_params(
+                    std::regex_replace(command,this_rgx, this->entity)
+                    );
+            }
+
+            pqxx::result query(const std::string command, std::vector<Data> params) override {
+                static const std::regex this_rgx("\\$this");
+                std::vector<std::string> params_str;
+                int count = 0;
+                std::for_each(params.begin(), params.end(), [&](Data& param){
+                    params_str.push_back(cvt_data_string(param));
+                });
+                did_commit = false;
+                return work.exec_params(
+                    std::regex_replace(command,this_rgx, this->entity),
+                    pqxx::prepare::make_dynamic_params(params_str)
+                    );
+            }
+
+            /* FIND, AKA SELECT */
+
+            pqxx::result findAll() override {
+                return work.exec_params(
+                    "SELECT * FROM /* ENTITY => */ "+this->entity
+                    );
+            }
+            pqxx::result findWhere(std::string where) override {
+                return work.exec_params(
+                    "SELECT * FROM /* ENTITY => */ "+this->entity + " WHERE /* YOUR CODE => */ " + where
+                    );
+            }
+
+            pqxx::result findWhere(std::string where, std::vector<Data> params) override {
+                std::vector<std::string> params_str;
+                std::for_each(params.begin(), params.end(), [&](Data& param){
+                    params_str.push_back(cvt_data_string(param));
+                });
+                return work.exec_params(
+                    "SELECT * FROM /* ENTITY => */  "+this->entity + " WHERE /* CONDITIONS => */ " + where,
+                    pqxx::prepare::make_dynamic_params(params_str)
+                    );
+            }
+            pqxx::result findAll(const EvenVector<Data> data) override {
+                std::vector<std::string> params;
+                std::string res;
+                assert(!data.empty());
+                {
+                    int count = 0;
+                    bool key = true;
+                    for(const auto & value : data){
+                        if(key) res += " " + cvt_data_string(value);
+                        else {
+                            res+= std::string(" = ") +  "$" + to_string(++count) + " and";
+                            params.push_back(cvt_data_string(value));
+                        }
+                        key = not key;
+                    }
+                }
+                return work.exec_params(
+                    "SELECT * FROM /* ENTITY => */ "+this->entity +" where " + res.substr(0, res.length()-3),
+                    pqxx::prepare::make_dynamic_params(params)
+                    );
+            }
+
+            pqxx::result findStr(const std::string id) {
+                return work.exec_params(
+                    "SELECT * FROM /* ENTITY => */ "+this->entity+" WHERE id = $1",
+                    id);
+            }
+
+            pqxx::result find(const K id) override {
+                return findStr(to_string(id));
+            }
+
+            /* DELETE */
+
+            pqxx::result deleteAll() override {
+                did_commit = false;
+                return work.exec_params(
+                    "DELETE FROM /* ENTITY => */ "+this->entity+ " WHERE id IS NOT NULL"
+                    );
+            }
+
+            pqxx::result deleteWhere(std::string where) override {
+                did_commit = false;
+                return work.exec_params(
+                    "DELETE FROM /* ENTITY => */ "+this->entity + " WHERE /* YOUR CODE => */ " + where
+                    );
+            }
+
+            pqxx::result deleteWhere(std::string where, std::vector<Data> params) override {
+                std::vector<std::string> params_str;
+                std::for_each(params.begin(), params.end(), [&](Data& param){
+                    params_str.push_back(cvt_data_string(param));
+                });
+                did_commit = false;
+                return work.exec_params(
+                    "DELETE FROM /* ENTITY => */  "+this->entity + " WHERE /* CONDITIONS => */ " + where,
+                    pqxx::prepare::make_dynamic_params(params_str)
+                    );
+            }
+
+            pqxx::result deleteAll(EvenVector<Data> data) override {
+                std::vector<std::string> params;
+                std::string res;
+                assert(!data.empty());
+                {
+                    int count = 0;
+                    bool key = true;
+                    for(const auto & value : data){
+                        if(key) res += " " + cvt_data_string(value);
+                        else {
+                            res+= std::string(" = ") +  "$" + to_string(++count) + " and";
+                            params.push_back(cvt_data_string(value));
+                        }
+                        key = not key;
+                    }
+                }
+                did_commit = false;
+                return work.exec_params(
+                    "DELETE FROM /* ENTITY => */ "+this->entity +" where " + res.substr(0, res.length()-3),
+                    pqxx::prepare::make_dynamic_params(params)
+                    );
+            }
+
+            pqxx::result deleteStr(const std::string id) {
+                did_commit = false;
+                return work.exec_params(
+                    "DELETE FROM /* ENTITY => */ "+this->entity+" WHERE id = $1",
+                    id);
+            }
+
+            pqxx::result delete_(const K id) override {
+                return deleteStr(to_string(id));
+            }
+            /* UPDATE */
+
+            pqxx::result updateAll(const EvenVector<Data> data) override {
+                std::vector<std::string> params;
+                std::string res;
+                assert(!data.empty());
+                {
+                    int count = 0;
+                    bool key = true;
+                    for(const auto & value : data){
+                        if(key) res += " " + cvt_data_string(value);
+                        else {
+                            res+= std::string(" = ") +  "$" + to_string(++count) + ",";
+                            params.push_back(cvt_data_string(value));
+                        }
+                        key = not key;
+                    }
+                }
+                did_commit = false;
+                return work.exec_params(
+                    "UPDATE /* ENTITY => */ "+this->entity +" SET  /* NEW VALUES => */" + res.substr(0, res.length()-1) + " WHERE id IS NOT NULL",
+                    pqxx::prepare::make_dynamic_params(params)
+                    );
+            }
+
+            pqxx::result updateWhere(const std::string where, const EvenVector<Data> new_values) override {
+                std::vector<std::string> params;
+                std::string res;
+                assert(!new_values.empty());
+                {
+                    int count = 0;
+                    bool key = true;
+                    for(const auto & value : new_values){
+                        if(key) res += " " + cvt_data_string(value);
+                        else {
+                            res+= std::string(" = ") +  "$" + to_string(++count) + ",";
+                            params.push_back(cvt_data_string(value));
+                        }
+                        key = not key;
+                    }
+                }
+                did_commit = false;
+                return work.exec_params(
+                    "UPDATE /* ENTITY => */ "+this->entity +" SET  /* NEW VALUES => */" + res.substr(0, res.length()-1) + " WHERE /* YOUR CODE => */ " + where,
+                    pqxx::prepare::make_dynamic_params(params)
+                    );
+            }
+
+            pqxx::result updateWhere(const std::string where, const std::vector<Data> where_params, const EvenVector<Data> new_values) override {
+                std::vector<std::string> params;
+                std::string res;
+                int count = where_params.size();
+                std::for_each(where_params.begin(), where_params.end(), [&](Data param){
+                    params.push_back(cvt_data_string(param));
+                });
+                assert(!new_values.empty());
+                {
+                    bool key = true;
+                    for(const auto & value : new_values){
+                        if(key) res += " " + cvt_data_string(value);
+                        else {
+                            res+= std::string(" = ") +  "$" + to_string(++count) + ",";
+                            params.push_back(cvt_data_string(value));
+                        }
+                        key = not key;
+                    }
+                }
+                did_commit = false;
+                return work.exec_params(
+                    "UPDATE /* ENTITY => */ "+this->entity +" SET  /* NEW VALUES => */" + res.substr(0, res.length()-1) + " WHERE /* YOUR CODE => */" + where,
+                    pqxx::prepare::make_dynamic_params(params)
+                    );
+            }
+
+            pqxx::result updateStr(const std::string id, const EvenVector<Data> new_values) {
+                std::vector<std::string> params;
+                std::string res;
+                params.push_back(std::string(id));
+                int count = 1;
+                assert(!new_values.empty());
+                {
+                    bool key = true;
+                    for(const auto & value : new_values){
+                        if(key) res += " " + cvt_data_string(value);
+                        else {
+                            res += std::string(" = ") +  "$" + to_string(++count) + ",";
+                            params.push_back(cvt_data_string(value));
+                        }
+                        key = not key;
+                    }
+                }
+                did_commit = false;
+                return work.exec_params(
+                    "UPDATE /* ENTITY => */ "+this->entity +" SET  /* NEW VALUES => */" + res.substr(0, res.length()-1) + " WHERE id = $1 ",
+                    pqxx::prepare::make_dynamic_params(params)
+                    );
+            }
+
+            pqxx::result update(const K id, const EvenVector<Data> new_values) override {
+                return updateStr(to_string(id), new_values);
+            }
+
+            /* INSERT */
+
+            pqxx::result insert(const EvenVector<Data> params) override {
+                std::string fields_str;
+                std::string values_str;
+                std::vector<std::string> values;
+
+                {
+                    int count = 0;
+                    {
+                        bool key = true;
+                        for(const auto & value : params){
+                            auto value_as_string = cvt_data_string(value);
+                            if(key) {
+                                fields_str += " " + value_as_string + ",";
+                                values_str += "$" + to_string(++count) + ",";
+                            }
+                            else values.push_back(value_as_string);
+                            key = not key;
+                        }
+                    }
+                }
+                did_commit = false;
+                return work.exec_params(
+                    "INSERT INTO /* ENTITY => */ "+this->entity +
+                    "  /* FIELDS => */(  " + fields_str.substr(0,fields_str.size()-1) + " ) " +
+                    " VALUES (  " + values_str.substr(0,values_str.size()-1) + " )",
+                    pqxx::prepare::make_dynamic_params(values)
+                    );
+            }
+
+            pqxx::result insertAll(std::vector<std::string> fields, std::vector<Data> values) override {
+                std::string fields_str;
+                std::string values_str;
+                std::vector<std::string> values_as_strs;
+
+                {
+                    for(const auto & field : fields){
+                        fields_str += " " + field + ",";
+                    }
+                    int count = 0;
+                    for(const auto & value : values){
+                        if(not (count % fields.size())){
+                            if(not values_str.empty()) values_str = values_str.substr(0,values_str.size()-1);
+                            values_str += "),(";
+                        }
+                        values_str += "$"+ to_string(++count) + ",";
+                        values_as_strs.push_back(cvt_data_string(value));
+                    }
+                    values_str = values_str.substr(0,values_str.size()-1) + ")";
+                }
+                did_commit = false;
+                return work.exec_params(
+                    "INSERT INTO /* ENTITY => */ "+this->entity +
+                        "  /* FIELDS => */ (  " + fields_str.substr(0,fields_str.size()-1) + " ) " +
+                        " VALUES /* VALUES => */ " + values_str.substr(2,values_str.size()-2),
+                    pqxx::prepare::make_dynamic_params(values_as_strs)
+                    );
+            }
+
+            pqxx::result drop() override {
+                did_commit = true;
+                return work.exec_params(
+                    "DROP TABLE /* ENTITY => */ "+this->entity
+                    );
+            }
+
+            pqxx::result create(EvenVector<Data> data, std::string sufix = "") override {
+                std::string attrs_str;
+                {
+                    bool key = true;
+                    for(const auto & value : data){
+                        if(key) attrs_str += " " + cvt_data_string(value);
+                        else attrs_str += " " + cvt_data_string(value) + ",";
+                        key = not key;
+                    }
+                }
+                return work.exec_params(
+                    "CREATE TABLE /* ENTITY => */ "+this->entity+" ("+attrs_str.substr(0,attrs_str.size()-1) + " " + sufix +" )"
+                    );
+            }
+
+            void commit(){
+                if(not did_commit)
+                    work.commit();
+                did_commit = true;
+            }
+
+            void abort(){
+                work.abort();
+            }
+        };
+    }
+};
+
+#endif /* model_hpp */
