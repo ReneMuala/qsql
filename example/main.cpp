@@ -4,10 +4,10 @@ using namespace std;
 
 int main()
 {
-    qql::pq::Model<int> User {"usuario", "postgresql://postgres:crzilians@localhost/playDB"};
+    qql::pq::Model<int> User {"user", "postgresql://user:pass@localhost/db"};
 
 
-    for(auto user : User.findAll()){
+    for(auto user : User.findAll()){s
         cout << user["firstName"] << std::endl;
     }
 
