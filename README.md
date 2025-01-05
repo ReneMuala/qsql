@@ -39,22 +39,12 @@ User.update(1,{ "firstName", "John Doe" });
 
 # **Support**
 
-## **Languages**
-
-| Name       | Supported |
-| ---------- | --------- |
-| Cpp        | Yes       |
-| Go         | Soon      |
-| Rust       | Soon      |
-| JavaScript | Soon      |
-| Java       | Soon      |
-
 ## **Databases**
 
 | Name       | Supported |
 | ---------- | --------- |
 | PostgreSQL | Yes       |
-| MariaDB    | Soon      |
+| sqlite3 | Yes       |
 | MySQL      | Soon      |
 
 # Setting up in Cpp
@@ -64,6 +54,7 @@ qsql is available for cpp has a header only library.
 ## With CMake
 1. move the directory `qsql` to your projects directory
 2. add `include_directories(./qsql)`
+3. link with libpqxx or sqlite3
 
 ## Installing globally
 move the directory `qsql` to your compiler's include directory.
