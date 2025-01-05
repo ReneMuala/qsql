@@ -9,7 +9,6 @@
 #ifndef model_hpp
 #define model_hpp
 #include <iostream>
-#include <qsql/pq/error>
 #include <pqxx/pqxx>
 #include <algorithm>
 #include <qsql/model/basic_model>
@@ -19,7 +18,7 @@ namespace qql {
 namespace pq {
 using namespace std;
         template<typename K>
-        class Model : public BasicModel<pqxx::result, K> {
+        class model : public basic_model<pqxx::result, K> {
             pqxx::connection connection;
             pqxx::work work;
             bool did_commit;
@@ -30,15 +29,15 @@ using namespace std;
             }
             public:
             bool auto_commit;
-            explicit Model(std::string entity, std::string url):
-                    BasicModel<pqxx::result, K>(entity),
+            explicit model(std::string entity, std::string url):
+                    basic_model<pqxx::result, K>(entity),
                     connection(get_new_connection(url)),
                     work(connection),
                     did_commit(true),
                     auto_commit(false){
             }
 
-            ~Model(){
+            ~model(){
                 if(not did_commit){
                     if(not auto_commit){
                         std::cerr << typeid(this).name() <<  __FUNCTION__ << ": Pending operations did not commit, set this->auto_commit=true or call this->commit()" << std::endl;
@@ -73,18 +72,18 @@ using namespace std;
 
             /* FIND, AKA SELECT */
 
-            pqxx::result findAll() override {
+            pqxx::result find_all() override {
                 return work.exec_params(
                     "SELECT * FROM /* ENTITY => */ "+this->entity
                     );
             }
-            pqxx::result findWhere(const std::string & where) override {
+            pqxx::result find_where(const std::string & where) override {
                 return work.exec_params(
                     "SELECT * FROM /* ENTITY => */ "+this->entity + " WHERE /* YOUR CODE => */ " + where
                     );
             }
 
-            pqxx::result findWhere(const std::string & where, std::vector<Data> params) override {
+            pqxx::result find_where(const std::string & where, std::vector<Data> params) override {
                 std::vector<std::string> params_str;
                 std::for_each(params.begin(), params.end(), [&](Data& param){
                     params_str.push_back(cvt_data_string(param));
@@ -94,7 +93,7 @@ using namespace std;
                     pqxx::prepare::make_dynamic_params(params_str)
                     );
             }
-            pqxx::result findAll(const EvenVector<Data> data) override {
+            pqxx::result find_all(const even_vector<Data> data) override {
                 std::vector<std::string> params;
                 std::string res;
                 assert(!data.empty());
@@ -128,21 +127,21 @@ using namespace std;
 
             /* DELETE */
 
-            pqxx::result deleteAll() override {
+            pqxx::result delete_all() override {
                 did_commit = false;
                 return work.exec_params(
                     "DELETE FROM /* ENTITY => */ "+this->entity+ " WHERE id IS NOT NULL"
                     );
             }
 
-            pqxx::result deleteWhere(const std::string & where) override {
+            pqxx::result delete_where(const std::string & where) override {
                 did_commit = false;
                 return work.exec_params(
                     "DELETE FROM /* ENTITY => */ "+this->entity + " WHERE /* YOUR CODE => */ " + where
                     );
             }
 
-            pqxx::result deleteWhere(const std::string & where, std::vector<Data> params) override {
+            pqxx::result delete_where(const std::string & where, std::vector<Data> params) override {
                 std::vector<std::string> params_str;
                 std::for_each(params.begin(), params.end(), [&](Data& param){
                     params_str.push_back(cvt_data_string(param));
@@ -154,7 +153,7 @@ using namespace std;
                     );
             }
 
-            pqxx::result deleteAll(EvenVector<Data> data) override {
+            pqxx::result delete_all(even_vector<Data> data) override {
                 std::vector<std::string> params;
                 std::string res;
                 assert(!data.empty());
@@ -177,7 +176,7 @@ using namespace std;
                     );
             }
 
-            pqxx::result deleteStr(const std::string & id) {
+            pqxx::result delete_str(const std::string & id) {
                 did_commit = false;
                 return work.exec_params(
                     "DELETE FROM /* ENTITY => */ "+this->entity+" WHERE id = $1",
@@ -185,11 +184,11 @@ using namespace std;
             }
 
             pqxx::result delete_(const K id) override {
-                return deleteStr(to_string(id));
+                return delete_str(to_string(id));
             }
             /* UPDATE */
 
-            pqxx::result updateAll(const EvenVector<Data> data) override {
+            pqxx::result update_all(const even_vector<Data> data) override {
                 std::vector<std::string> params;
                 std::string res;
                 assert(!data.empty());
@@ -212,7 +211,7 @@ using namespace std;
                     );
             }
 
-            pqxx::result updateWhere(const std::string & where, const EvenVector<Data> new_values) override {
+            pqxx::result update_where(const std::string & where, const even_vector<Data> new_values) override {
                 std::vector<std::string> params;
                 std::string res;
                 assert(!new_values.empty());
@@ -235,7 +234,7 @@ using namespace std;
                     );
             }
 
-            pqxx::result updateWhere(const std::string & where, const std::vector<Data> where_params, const EvenVector<Data> new_values) override {
+            pqxx::result update_where(const std::string & where, const std::vector<Data> where_params, const even_vector<Data> new_values) override {
                 std::vector<std::string> params;
                 std::string res;
                 int count = where_params.size();
@@ -261,7 +260,7 @@ using namespace std;
                     );
             }
 
-            pqxx::result updateStr(const std::string & id, const EvenVector<Data> new_values) {
+            pqxx::result updateStr(const std::string & id, const even_vector<Data> new_values) {
                 std::vector<std::string> params;
                 std::string res;
                 params.push_back(std::string(id));
@@ -285,13 +284,13 @@ using namespace std;
                     );
             }
 
-            pqxx::result update(const K id, const EvenVector<Data> new_values) override {
+            pqxx::result update(const K id, const even_vector<Data> new_values) override {
                 return updateStr(to_string(id), new_values);
             }
 
             /* INSERT */
 
-            pqxx::result insert(const EvenVector<Data> params) override {
+            pqxx::result insert(const even_vector<Data> params) override {
                 std::string fields_str;
                 std::string values_str;
                 std::vector<std::string> values;
@@ -320,7 +319,7 @@ using namespace std;
                     );
             }
 
-            pqxx::result insertAll(std::vector<std::string> fields, std::vector<Data> values) override {
+            pqxx::result insert_all(std::vector<std::string> fields, std::vector<Data> values) override {
                 std::string fields_str;
                 std::string values_str;
                 std::vector<std::string> values_as_strs;
@@ -356,7 +355,7 @@ using namespace std;
                     );
             }
 
-            pqxx::result create(EvenVector<Data> data, std::string sufix = "") override {
+            pqxx::result create(even_vector<Data> data, std::string sufix = "") override {
                 std::string attrs_str;
                 {
                     bool key = true;

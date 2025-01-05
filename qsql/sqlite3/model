@@ -128,7 +128,7 @@ namespace qql
         using namespace std;
 
         template <typename K>
-        class Model : public BasicModel<sqlite3::result, K>
+        class model : public basic_model<sqlite3::result, K>
         {
             SQLite::Database database;
 
@@ -146,8 +146,8 @@ namespace qql
             std::string sql_query;
 #endif
 
-            explicit Model(std::string entity, std::string url):
-                BasicModel<sqlite3::result, K>(entity),
+            explicit model(std::string entity, std::string url):
+                basic_model<sqlite3::result, K>(entity),
                 database(get_new_sqlite_connection(url)),
                 // connection(get_new_connection(url)),
                 // work(connection),
@@ -156,7 +156,7 @@ namespace qql
             {
             }
 
-            ~Model()
+            ~model()
             {
                 if (false or not did_commit)
                 {
@@ -202,7 +202,7 @@ namespace qql
 
             /* FIND, AKA SELECT */
 
-            sqlite3::result findAll() override
+            sqlite3::result find_all() override
             {
                 auto query = make_shared<SQLite::Statement>(database, "SELECT * FROM " + this->entity);
 #ifdef ENABLE_QSQL_DEBUG_MODE
@@ -217,7 +217,7 @@ namespace qql
                 return std::regex_replace(statement, this_rgx, this->entity);
             }
 
-            sqlite3::result findWhere(const std::string& where) override
+            sqlite3::result find_where(const std::string& where) override
             {
                 auto query = make_shared<SQLite::Statement>(database,  "SELECT * FROM " + this->entity + " WHERE " + replace_this_by_entity(where));
 #ifdef ENABLE_QSQL_DEBUG_MODE
@@ -226,7 +226,7 @@ namespace qql
                 return sqlite3::result(query);
             }
 
-            sqlite3::result findWhere(const std::string& where, std::vector<Data> params) override
+            sqlite3::result find_where(const std::string& where, std::vector<Data> params) override
             {
                 int count = 1;
                 auto query = make_shared<SQLite::Statement>(database, "SELECT * FROM " + this->entity + " WHERE " + replace_this_by_entity(where));
@@ -241,7 +241,7 @@ namespace qql
                 return sqlite3::result(query);
             }
 
-            sqlite3::result findAll(const EvenVector<Data> data) override
+            sqlite3::result find_all(const even_vector<Data> data) override
             {
                 std::vector<std::string> params;
                 std::string res;
@@ -290,7 +290,7 @@ namespace qql
 
             /* DELETE */
 
-            sqlite3::result deleteAll() override
+            sqlite3::result delete_all() override
             {
                 did_commit = false;
                 auto query = make_shared<SQLite::Statement>(database,"DELETE FROM " + this->entity + " WHERE id IS NOT NULL");
@@ -302,7 +302,7 @@ namespace qql
                 return r;
             }
 
-            sqlite3::result deleteWhere(const std::string& where) override
+            sqlite3::result delete_where(const std::string& where) override
             {
                 did_commit = false;
                 auto query = make_shared<SQLite::Statement>(database,"DELETE FROM " + this->entity + " WHERE " + replace_this_by_entity(where));
@@ -314,7 +314,7 @@ namespace qql
                 return r;
             }
 
-            sqlite3::result deleteWhere(const std::string& where, std::vector<Data> params) override
+            sqlite3::result delete_where(const std::string& where, std::vector<Data> params) override
             {
                 std::vector<std::string> params_str;
                 std::for_each(params.begin(), params.end(), [&](Data& param)
@@ -336,7 +336,7 @@ namespace qql
                 return r;
             }
 
-            sqlite3::result deleteAll(EvenVector<Data> data) override
+            sqlite3::result delete_all(even_vector<Data> data) override
             {
                 std::vector<std::string> params;
                 std::string res;
@@ -370,7 +370,7 @@ namespace qql
                 return r;
             }
 
-            sqlite3::result deleteStr(const std::string& id)
+            sqlite3::result delete_str(const std::string& id)
             {
                 did_commit = false;
                 auto query = make_shared<SQLite::Statement>(database, "DELETE FROM " + this->entity + " WHERE id = $1");
@@ -385,12 +385,12 @@ namespace qql
 
             sqlite3::result delete_(const K id) override
             {
-                return deleteStr(to_string(id));
+                return delete_str(to_string(id));
             }
 
             /* UPDATE */
 
-            sqlite3::result updateAll(const EvenVector<Data> data) override
+            sqlite3::result update_all(const even_vector<Data> data) override
             {
                 std::vector<std::string> params;
                 std::string res;
@@ -424,7 +424,7 @@ namespace qql
                 return r;
             }
 
-            sqlite3::result updateWhere(const std::string& where, const EvenVector<Data> new_values) override
+            sqlite3::result update_where(const std::string& where, const even_vector<Data> new_values) override
             {
                 std::vector<std::string> params;
                 std::string res;
@@ -459,8 +459,8 @@ namespace qql
                 return r;
             }
 
-            sqlite3::result updateWhere(const std::string& where, const std::vector<Data> where_params,
-                                     const EvenVector<Data> new_values) override
+            sqlite3::result update_where(const std::string& where, const std::vector<Data> where_params,
+                                     const even_vector<Data> new_values) override
             {
                 std::vector<std::string> params;
                 std::string res;
@@ -499,7 +499,7 @@ namespace qql
                 return r;
             }
 
-            sqlite3::result updateStr(const std::string& id, const EvenVector<Data> new_values)
+            sqlite3::result updateStr(const std::string& id, const even_vector<Data> new_values)
             {
                 std::vector<std::string> params;
                 std::string res;
@@ -536,14 +536,14 @@ namespace qql
                 return r;
             }
 
-            sqlite3::result update(const K id, const EvenVector<Data> new_values) override
+            sqlite3::result update(const K id, const even_vector<Data> new_values) override
             {
                 return updateStr(to_string(id), new_values);
             }
 
             /* INSERT */
 
-            sqlite3::result insert(const EvenVector<Data> params) override
+            sqlite3::result insert(const even_vector<Data> params) override
             {
                 std::string fields_str;
                 std::string values_str;
@@ -583,7 +583,7 @@ namespace qql
                 return r;
             }
 
-            sqlite3::result insertAll(std::vector<std::string> fields, std::vector<Data> values) override
+            sqlite3::result insert_all(std::vector<std::string> fields, std::vector<Data> values) override
             {
                 std::string fields_str;
                 std::string values_str;
@@ -636,7 +636,7 @@ namespace qql
                 return r;
             }
 
-            sqlite3::result create(EvenVector<Data> data, std::string sufix = "") override
+            sqlite3::result create(even_vector<Data> data, std::string sufix = "") override
             {
                 std::string attrs_str;
                 {

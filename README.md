@@ -29,7 +29,7 @@ Queries are generated based on simple and practical methods, drastically reducin
 
 ```C++
 
-for(auto user : User.findAll()){
+for(auto user : User.find_all()){
     cout << user["firstName"] << std::endl;
 }
 

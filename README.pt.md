@@ -29,7 +29,7 @@ Consultas são geradas com base em métodos simples e práticos, reduzindo drast
 
 ```C++
 
-for(auto usuario : Usuario.findAll()){
+for(auto usuario : Usuario.find_all()){
     cout << user["primeiroNome"] << std::endl;
 }
 
