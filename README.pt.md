@@ -39,32 +39,24 @@ Usuario.update(1,{ "primeiroNome", "João" });
 
 # Suporte
 
-## Linguagens
-
-| Nome       | Suportada  |
-| ---------- | ---------- |
-| Cpp        | SIm        |
-| Go         | Brevemente |
-| Rust       | Brevemente |
-| JavaScript | Brevemente |
-| Java       | Brevemente |
-
 ## Bancos de dados
 
 | Nome       | Suportado  |
-| ---------- | ---------- |
+|------------|------------|
 | PostgreSQL | Sim        |
-| MariaDB    | Brevemente |
+| Sqlite3    | Sim        |
+| Duckdb     | Brevemente |
 | MySQL      | Brevemente |
 
 # Instalando em C++
 
-qsql está disponível para C++ como uma biblioteca de cabeçalho apenas.
+qsql está disponível para C++ como uma biblioteca apenas de cabeçalho.
 
 ## Com CMake
 
 1. Mova o diretório `qsql` para o diretório do seu projeto.
 2. Adicione `include_directories(./qsql)`.
+3. Faça o link com as blibliotecas necessárias (libpqxx para postgres ou SQLitepp)
 
 ## Instalando globalmente
 

@@ -38,25 +38,25 @@ protected:
     const std::string entity;
 public:
 
-    BasicModel(const std::string entity): entity(entity) {}
-    virtual T query(const std::string) = 0;
-    virtual T query(const std::string, const std::vector<Data> params) = 0;
+    BasicModel(const std::string & entity): entity(entity) {}
+    virtual T query(const std::string &) = 0;
+    virtual T query(const std::string &, const std::vector<Data> params) = 0;
 
     virtual T findAll() = 0;
     virtual T findAll(EvenVector<Data> data) = 0;
-    virtual T findWhere(const std::string) = 0;
-    virtual T findWhere(const std::string, const std::vector<Data> params) = 0;
+    virtual T findWhere(const std::string &) = 0;
+    virtual T findWhere(const std::string &, const std::vector<Data> params) = 0;
     virtual T find(const K id) = 0;
 
     virtual T deleteAll() = 0;
     virtual T deleteAll(EvenVector<Data> data) = 0;
-    virtual T deleteWhere(const std::string) = 0;
-    virtual T deleteWhere(const std::string, const std::vector<Data> params) = 0;
+    virtual T deleteWhere(const std::string &) = 0;
+    virtual T deleteWhere(const std::string &, const std::vector<Data> params) = 0;
     virtual T delete_(const K id) = 0;
 
     virtual T updateAll(EvenVector<Data> data) = 0;
-    virtual T updateWhere(const std::string, EvenVector<Data> new_values) = 0;
-    virtual T updateWhere(const std::string, const std::vector<Data> params, EvenVector<Data> new_values) = 0;
+    virtual T updateWhere(const std::string &, EvenVector<Data> new_values) = 0;
+    virtual T updateWhere(const std::string &, const std::vector<Data> params, EvenVector<Data> new_values) = 0;
     virtual T update(const K id, EvenVector<Data> new_values) = 0;
 
     virtual T insert(const EvenVector<Data> params) = 0;

@@ -3,18 +3,23 @@
 using namespace std;
 
 int main()
+try
 {
     qql::pq::Model<int> User {"user", "postgresql://user:pass@localhost/db"};
 
 
-    for(auto user : User.findAll()){s
+    for(auto user : User.findAll()){
         cout << user["firstName"] << std::endl;
     }
 
     User.update(1,
                 {
-                    "firstName", "John Doe"
+                    "name", "John Doe"
                 });
-
+    User.commit();
     return 0;
+}
+catch (std::exception& e)
+{
+    cout << e.what() << endl;
 }

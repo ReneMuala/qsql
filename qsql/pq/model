@@ -48,7 +48,7 @@ using namespace std;
                 }
             }
 
-            pqxx::result query(const std::string command) override {
+            pqxx::result query(const std::string & command) override {
                 static const std::regex this_rgx("\\$this");
                 std::vector<std::string> params_str;
                 did_commit = false;
@@ -57,7 +57,7 @@ using namespace std;
                     );
             }
 
-            pqxx::result query(const std::string command, std::vector<Data> params) override {
+            pqxx::result query(const std::string & command, std::vector<Data> params) override {
                 static const std::regex this_rgx("\\$this");
                 std::vector<std::string> params_str;
                 int count = 0;
@@ -78,13 +78,13 @@ using namespace std;
                     "SELECT * FROM /* ENTITY => */ "+this->entity
                     );
             }
-            pqxx::result findWhere(std::string where) override {
+            pqxx::result findWhere(const std::string & where) override {
                 return work.exec_params(
                     "SELECT * FROM /* ENTITY => */ "+this->entity + " WHERE /* YOUR CODE => */ " + where
                     );
             }
 
-            pqxx::result findWhere(std::string where, std::vector<Data> params) override {
+            pqxx::result findWhere(const std::string & where, std::vector<Data> params) override {
                 std::vector<std::string> params_str;
                 std::for_each(params.begin(), params.end(), [&](Data& param){
                     params_str.push_back(cvt_data_string(param));
@@ -116,7 +116,7 @@ using namespace std;
                     );
             }
 
-            pqxx::result findStr(const std::string id) {
+            pqxx::result findStr(const std::string & id) {
                 return work.exec_params(
                     "SELECT * FROM /* ENTITY => */ "+this->entity+" WHERE id = $1",
                     id);
@@ -135,14 +135,14 @@ using namespace std;
                     );
             }
 
-            pqxx::result deleteWhere(std::string where) override {
+            pqxx::result deleteWhere(const std::string & where) override {
                 did_commit = false;
                 return work.exec_params(
                     "DELETE FROM /* ENTITY => */ "+this->entity + " WHERE /* YOUR CODE => */ " + where
                     );
             }
 
-            pqxx::result deleteWhere(std::string where, std::vector<Data> params) override {
+            pqxx::result deleteWhere(const std::string & where, std::vector<Data> params) override {
                 std::vector<std::string> params_str;
                 std::for_each(params.begin(), params.end(), [&](Data& param){
                     params_str.push_back(cvt_data_string(param));
@@ -177,7 +177,7 @@ using namespace std;
                     );
             }
 
-            pqxx::result deleteStr(const std::string id) {
+            pqxx::result deleteStr(const std::string & id) {
                 did_commit = false;
                 return work.exec_params(
                     "DELETE FROM /* ENTITY => */ "+this->entity+" WHERE id = $1",
@@ -212,7 +212,7 @@ using namespace std;
                     );
             }
 
-            pqxx::result updateWhere(const std::string where, const EvenVector<Data> new_values) override {
+            pqxx::result updateWhere(const std::string & where, const EvenVector<Data> new_values) override {
                 std::vector<std::string> params;
                 std::string res;
                 assert(!new_values.empty());
@@ -235,7 +235,7 @@ using namespace std;
                     );
             }
 
-            pqxx::result updateWhere(const std::string where, const std::vector<Data> where_params, const EvenVector<Data> new_values) override {
+            pqxx::result updateWhere(const std::string & where, const std::vector<Data> where_params, const EvenVector<Data> new_values) override {
                 std::vector<std::string> params;
                 std::string res;
                 int count = where_params.size();
@@ -261,7 +261,7 @@ using namespace std;
                     );
             }
 
-            pqxx::result updateStr(const std::string id, const EvenVector<Data> new_values) {
+            pqxx::result updateStr(const std::string & id, const EvenVector<Data> new_values) {
                 std::vector<std::string> params;
                 std::string res;
                 params.push_back(std::string(id));

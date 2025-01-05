@@ -1,0 +1,5 @@
+[requires]
+libpqxx/7.9.2
+
+[generators]
+PkgConfigDeps

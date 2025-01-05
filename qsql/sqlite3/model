@@ -1,0 +1,675 @@
+// -*- C++ -*-
+//
+//  model.hpp
+//  QQL
+//
+//  Created by René Descartes Domingos Muala on 04/01/25.
+//
+#include <qsql/model/basic_model>
+#include <memory>
+#include <SQLiteCpp/SQLiteCpp.h>
+#include <algorithm>
+#include <iostream>
+#include <regex>
+
+namespace qql
+{
+    namespace sqlite3
+    {
+        class result
+        {
+        public:
+            std::shared_ptr<SQLite::Statement> statement;
+            std::map<std::string, std::string> data;
+
+            explicit result(std::shared_ptr<SQLite::Statement>  statement): statement(statement)
+            {
+            }
+
+            void collect()
+            {
+                if (data.empty())
+                    statement->executeStep();
+                data.clear();
+                for (int i = 0; i != statement->getColumnCount(); i++)
+                {
+                    const std::string k = statement->getColumnName(i);
+                    const std::string v = statement->getColumn(i);
+                    data[k] = v;
+                }
+            }
+
+            void execute() const
+            {
+                statement->exec();
+            }
+
+            bool fetch()
+            {
+                collect();
+                if (not is_done())
+                {
+                    statement->executeStep();
+                }
+                return not is_done();
+            }
+
+            bool is_done() const
+            {
+                return statement->isDone();
+            }
+
+            explicit operator bool() const
+            {
+                return is_done();
+            }
+
+            std::string operator[](const std::string& key)
+            {
+                return data.find(key)->second;
+            }
+
+            struct iterator : public std::iterator<std::forward_iterator_tag, result>
+            {
+                std::optional<std::reference_wrapper<result>> current;
+
+            public:
+                explicit iterator(result& res)
+                {
+                    current = res;
+                    ++*this;
+                }
+
+                explicit iterator(std::optional<result> res = {})
+                {
+                    if (res)
+                        iterator(std::move(res.value()));
+                }
+
+                result& operator*()
+                {
+                    return *current;
+                }
+
+                iterator& operator++()
+                {
+                    if (current)
+                    {
+                        if (current->get().is_done())
+                            this->current = {};
+                        else
+                            current->get().fetch();
+                    }
+                    return *this;
+                }
+
+                bool operator==(const iterator& rhs) const
+                {
+                    return (this->current.has_value() == rhs.current.has_value());
+                }
+
+                bool operator!=(const iterator& rhs) const
+                {
+                    return !(*this == rhs);
+                }
+            };
+
+            iterator begin()
+            {
+                return iterator(*this);
+            }
+
+            iterator end()
+            {
+                return iterator();
+            }
+        };
+
+        using namespace std;
+
+        template <typename K>
+        class Model : public BasicModel<sqlite3::result, K>
+        {
+            SQLite::Database database;
+
+            bool did_commit;
+
+        protected:
+            static SQLite::Database get_new_sqlite_connection(std::string url)
+            {
+                return SQLite::Database(url, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
+            }
+
+        public:
+            bool auto_commit;
+#ifdef ENABLE_QSQL_DEBUG_MODE
+            std::string sql_query;
+#endif
+
+            explicit Model(std::string entity, std::string url):
+                BasicModel<sqlite3::result, K>(entity),
+                database(get_new_sqlite_connection(url)),
+                // connection(get_new_connection(url)),
+                // work(connection),
+                did_commit(true),
+                auto_commit(true)
+            {
+            }
+
+            ~Model()
+            {
+                if (false or not did_commit)
+                {
+                    if (not auto_commit)
+                    {
+                        std::cerr << typeid(this).name() << __FUNCTION__ <<
+                            ": Pending operations did not commit, set this->auto_commit=true or call this->commit()" <<
+                            std::endl;
+                    }
+                    else
+                    {
+                        commit();
+                    }
+                }
+            }
+
+            sqlite3::result query(const std::string& command) override
+            {
+                did_commit = false;
+                auto query = std::make_shared<SQLite::Statement>(database, replace_this_by_entity(command));
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                return sqlite3::result(query);
+            }
+
+
+            sqlite3::result query(const std::string& command, std::vector<Data> params) override
+            {
+                std::vector<std::string> params_str;
+                int count = 1;
+                auto query = make_shared<SQLite::Statement>(database, replace_this_by_entity(command));
+                std::for_each(params.begin(), params.end(), [&](Data& param)
+                {
+                    query->bind(count++, cvt_data_string(param));
+                });
+                did_commit = false;
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                return sqlite3::result(query);
+            }
+
+            /* FIND, AKA SELECT */
+
+            sqlite3::result findAll() override
+            {
+                auto query = make_shared<SQLite::Statement>(database, "SELECT * FROM " + this->entity);
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                return sqlite3::result(query);
+            }
+
+            std::string replace_this_by_entity(const std::string & statement)
+            {
+                static const std::regex this_rgx("\\$this");
+                return std::regex_replace(statement, this_rgx, this->entity);
+            }
+
+            sqlite3::result findWhere(const std::string& where) override
+            {
+                auto query = make_shared<SQLite::Statement>(database,  "SELECT * FROM " + this->entity + " WHERE " + replace_this_by_entity(where));
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                return sqlite3::result(query);
+            }
+
+            sqlite3::result findWhere(const std::string& where, std::vector<Data> params) override
+            {
+                int count = 1;
+                auto query = make_shared<SQLite::Statement>(database, "SELECT * FROM " + this->entity + " WHERE " + replace_this_by_entity(where));
+                std::for_each(params.begin(), params.end(), [&](Data& param)
+                {
+                    query->bind(count++, cvt_data_string(param));
+                });
+                did_commit = false;
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                return sqlite3::result(query);
+            }
+
+            sqlite3::result findAll(const EvenVector<Data> data) override
+            {
+                std::vector<std::string> params;
+                std::string res;
+
+                assert(!data.empty());
+                {
+                    int count = 0;
+                    bool key = true;
+                    for (const auto& value : data)
+                    {
+                        if (key) res += " " + cvt_data_string(value);
+                        else
+                        {
+                            res += std::string(" = ") + "$" + to_string(++count) + " and";
+                            params.push_back(cvt_data_string(value));
+                        }
+                        key = not key;
+                    }
+                }
+                auto query = make_shared<SQLite::Statement>(database, "SELECT * FROM " + this->entity + " where " + res.substr(0, res.length() - 4));
+                int count = 1;
+                for (const auto& param : params)
+                {
+                    query->bind(count++,param);
+                }
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                return sqlite3::result(query);
+            }
+
+            sqlite3::result findStr(const std::string& id)
+            {
+                auto query = make_shared<SQLite::Statement>(database, "SELECT * FROM " + this->entity + " WHERE id = $1");
+                query->bind(1, id);
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                return sqlite3::result(query);
+            }
+
+            sqlite3::result find(const K id) override
+            {
+                return findStr(to_string(id));
+            }
+
+            /* DELETE */
+
+            sqlite3::result deleteAll() override
+            {
+                did_commit = false;
+                auto query = make_shared<SQLite::Statement>(database,"DELETE FROM " + this->entity + " WHERE id IS NOT NULL");
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                auto r = sqlite3::result(query);
+                r.execute();
+                return r;
+            }
+
+            sqlite3::result deleteWhere(const std::string& where) override
+            {
+                did_commit = false;
+                auto query = make_shared<SQLite::Statement>(database,"DELETE FROM " + this->entity + " WHERE " + replace_this_by_entity(where));
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                auto r = sqlite3::result(query);
+                r.execute();
+                return r;
+            }
+
+            sqlite3::result deleteWhere(const std::string& where, std::vector<Data> params) override
+            {
+                std::vector<std::string> params_str;
+                std::for_each(params.begin(), params.end(), [&](Data& param)
+                {
+                    params_str.push_back(cvt_data_string(param));
+                });
+                did_commit = false;
+                auto query = make_shared<SQLite::Statement>(database, "DELETE FROM " + this->entity + " WHERE " + replace_this_by_entity(where));
+                int count = 1;
+                for (const auto& param : params_str)
+                {
+                    query->bind(count++,param);
+                }
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                auto r = sqlite3::result(query);
+                r.execute();
+                return r;
+            }
+
+            sqlite3::result deleteAll(EvenVector<Data> data) override
+            {
+                std::vector<std::string> params;
+                std::string res;
+                assert(!data.empty());
+                {
+                    int count = 0;
+                    bool key = true;
+                    for (const auto& value : data)
+                    {
+                        if (key) res += " " + cvt_data_string(value);
+                        else
+                        {
+                            res += std::string(" = ") + "$" + to_string(++count) + " and";
+                            params.push_back(cvt_data_string(value));
+                        }
+                        key = not key;
+                    }
+                }
+                did_commit = false;
+                auto query = make_shared<SQLite::Statement>(database, "DELETE FROM " + this->entity + " where " + res.substr(0, res.length() - 4));
+                int count = 1;
+                for (const auto& param : params)
+                {
+                    query->bind(count++,param);
+                }
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                auto r = sqlite3::result(query);
+                r.execute();
+                return r;
+            }
+
+            sqlite3::result deleteStr(const std::string& id)
+            {
+                did_commit = false;
+                auto query = make_shared<SQLite::Statement>(database, "DELETE FROM " + this->entity + " WHERE id = $1");
+                query->bind(1, id);
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                auto r = sqlite3::result(query);
+                r.execute();
+                return r;
+            }
+
+            sqlite3::result delete_(const K id) override
+            {
+                return deleteStr(to_string(id));
+            }
+
+            /* UPDATE */
+
+            sqlite3::result updateAll(const EvenVector<Data> data) override
+            {
+                std::vector<std::string> params;
+                std::string res;
+                assert(!data.empty());
+                {
+                    int count = 0;
+                    bool key = true;
+                    for (const auto& value : data)
+                    {
+                        if (key) res += " " + cvt_data_string(value);
+                        else
+                        {
+                            res += std::string(" = ") + "$" + to_string(++count) + ",";
+                            params.push_back(cvt_data_string(value));
+                        }
+                        key = not key;
+                    }
+                }
+                did_commit = false;
+                auto query = make_shared<SQLite::Statement>(database, "UPDATE " + this->entity + " SET" + res.substr(0, res.length() - 1) + " WHERE id IS NOT NULL");
+                int count = 1;
+                for (const auto& param : params)
+                {
+                    query->bind(count++,param);
+                }
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                auto r = sqlite3::result(query);
+                r.execute();
+                return r;
+            }
+
+            sqlite3::result updateWhere(const std::string& where, const EvenVector<Data> new_values) override
+            {
+                std::vector<std::string> params;
+                std::string res;
+                assert(!new_values.empty());
+                {
+                    int count = 0;
+                    bool key = true;
+                    for (const auto& value : new_values)
+                    {
+                        if (key) res += " " + cvt_data_string(value);
+                        else
+                        {
+                            res += std::string(" = ") + "$" + to_string(++count) + ",";
+                            params.push_back(cvt_data_string(value));
+                        }
+                        key = not key;
+                    }
+                }
+                did_commit = false;
+                auto query = make_shared<SQLite::Statement>(database,  "UPDATE " + this->entity + " SET " + res.
+                    substr(0, res.length() - 1) + " WHERE " + replace_this_by_entity(where));
+                int count = 1;
+                for (const auto& param : params)
+                {
+                    query->bind(count++,param);
+                }
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                auto r = sqlite3::result(query);
+                r.execute();
+                return r;
+            }
+
+            sqlite3::result updateWhere(const std::string& where, const std::vector<Data> where_params,
+                                     const EvenVector<Data> new_values) override
+            {
+                std::vector<std::string> params;
+                std::string res;
+                int count = where_params.size();
+                std::for_each(where_params.begin(), where_params.end(), [&](Data param)
+                {
+                    params.push_back(cvt_data_string(param));
+                });
+                assert(!new_values.empty());
+                {
+                    bool key = true;
+                    for (const auto& value : new_values)
+                    {
+                        if (key) res += " " + cvt_data_string(value);
+                        else
+                        {
+                            res += std::string(" = ") + "$" + to_string(++count) + ",";
+                            params.push_back(cvt_data_string(value));
+                        }
+                        key = not key;
+                    }
+                }
+                did_commit = false;
+                auto query = make_shared<SQLite::Statement>(database,  "UPDATE " + this->entity + " SET" + res.
+                substr(0, res.length() - 1) + " WHERE " + replace_this_by_entity(where));
+                count = 1;
+                for (const auto& param : params)
+                {
+                    query->bind(count++,param);
+                }
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                auto r = sqlite3::result(query);
+                r.execute();
+                return r;
+            }
+
+            sqlite3::result updateStr(const std::string& id, const EvenVector<Data> new_values)
+            {
+                std::vector<std::string> params;
+                std::string res;
+                params.push_back(std::string(id));
+                int count = 1;
+                assert(!new_values.empty());
+                {
+                    bool key = true;
+                    for (const auto& value : new_values)
+                    {
+                        if (key) res += " " + cvt_data_string(value);
+                        else
+                        {
+                            res += std::string(" = ") + "$" + to_string(++count) + ",";
+                            params.push_back(cvt_data_string(value));
+                        }
+                        key = not key;
+                    }
+                }
+                did_commit = false;
+
+                auto query = make_shared<SQLite::Statement>(database,  "UPDATE " + this->entity + " SET" + res.substr(
+                        0, res.length() - 1) + " WHERE id = $1");
+                count = 1;
+                for (const auto& param : params)
+                {
+                    query->bind(count++,param);
+                }
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                auto r = sqlite3::result(query);
+                r.execute();
+                return r;
+            }
+
+            sqlite3::result update(const K id, const EvenVector<Data> new_values) override
+            {
+                return updateStr(to_string(id), new_values);
+            }
+
+            /* INSERT */
+
+            sqlite3::result insert(const EvenVector<Data> params) override
+            {
+                std::string fields_str;
+                std::string values_str;
+                std::vector<std::string> values;
+
+                {
+                    int count = 0;
+                    {
+                        bool key = true;
+                        for (const auto& value : params)
+                        {
+                            auto value_as_string = cvt_data_string(value);
+                            if (key)
+                            {
+                                fields_str += value_as_string + ",";
+                                values_str += "$" + to_string(++count) + ",";
+                            }
+                            else values.push_back(value_as_string);
+                            key = not key;
+                        }
+                    }
+                }
+                did_commit = false;
+                auto query = make_shared<SQLite::Statement>(database,  "INSERT INTO " + this->entity +
+                "(" + fields_str.substr(0, fields_str.size() - 1) + ") " +
+                " VALUES(" + values_str.substr(0, values_str.size() - 1) + ")");
+                int count = 1;
+                for (const auto& param : values)
+                {
+                    query->bind(count++,param);
+                }
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                auto r = sqlite3::result(query);
+                r.execute();
+                return r;
+            }
+
+            sqlite3::result insertAll(std::vector<std::string> fields, std::vector<Data> values) override
+            {
+                std::string fields_str;
+                std::string values_str;
+                std::vector<std::string> values_as_strs;
+                {
+                    for (const auto& field : fields)
+                    {
+                        fields_str += field + ",";
+                    }
+                    int count = 0;
+                    for (const auto& value : values)
+                    {
+                        if (not(count % fields.size()))
+                        {
+                            if (not values_str.empty()) values_str = values_str.substr(0, values_str.size() - 1);
+                            values_str += "),(";
+                        }
+                        values_str += "$" + to_string(++count) + ",";
+                        values_as_strs.push_back(cvt_data_string(value));
+                    }
+                    values_str = values_str.substr(0, values_str.size() - 1) + ")";
+                }
+                did_commit = false;
+
+                auto query = make_shared<SQLite::Statement>(database,  "INSERT INTO " + this->entity +
+                " (" + fields_str.substr(0, fields_str.size() - 1) + ")" +
+                " VALUES" + values_str.substr(2, values_str.size() - 2));
+                int count = 1;
+                for (const auto& param : values_as_strs)
+                {
+                    query->bind(count++,param);
+                }
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                auto r = sqlite3::result(query);
+                r.execute();
+                return r;
+            }
+
+            sqlite3::result drop() override
+            {
+                did_commit = true;
+                auto query = make_shared<SQLite::Statement>(database,  "DROP TABLE " + this->entity);
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                auto r = sqlite3::result(query);
+                r.execute();
+                return r;
+            }
+
+            sqlite3::result create(EvenVector<Data> data, std::string sufix = "") override
+            {
+                std::string attrs_str;
+                {
+                    bool key = true;
+                    for (const auto& value : data)
+                    {
+                        if (key) attrs_str += " " + cvt_data_string(value);
+                        else attrs_str += " " + cvt_data_string(value) + ",";
+                        key = not key;
+                    }
+                }
+                auto query = make_shared<SQLite::Statement>(database,  "CREATE TABLE " + this->entity + " (" + attrs_str.substr(0, attrs_str.size() - 1) +
+                    (!sufix.empty() ? " " + sufix : "") + ")");
+#ifdef ENABLE_QSQL_DEBUG_MODE
+                this->sql_query = query->getExpandedSQL();
+#endif
+                auto r = sqlite3::result(query);
+                r.execute();
+                return r;
+            }
+
+            void commit()
+            {
+                // if (not did_commit)
+                //     work.commit();
+                // did_commit = true;
+            }
+
+            void abort()
+            {
+                // database.t
+                // work.abort();
+            }
+        };
+    }
+}
